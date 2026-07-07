@@ -1,0 +1,110 @@
+
+
+
+name: CI/CD Pipeline - Pet-Clinic
+ ## This workflow is triggered on push to the dev branch and on pull request to the main branch. 
+ ## It performs the following steps:
+    # 1. Gitleaks Secret Scan: Scans the repository for any secrets or sensitive information.
+    # 2. Build: Compiles and packages the application, skipping tests, and uploads the build artifact. 
+on:
+  push:
+    branches: [ dev ]
+  pull_request:
+    branches: [ main ]
+ 
+### The Global Environment Variables are defined here and can be used in all the jobs in this workflow.###
+env:
+  JAVA_VERSION: '25'
+  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+  SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+  VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
+  VAULT_ROLE_ID: ${{ secrets.VAULT_ROLE_ID }}
+  VAULT_SECRET_ID: ${{ secrets.VAULT_SECRET_ID }}
+  VAULT_JFROG_PATH: secrets/creds/jfrog
+  JFROG_URL: ${{ secrets.JFROG_URL }}
+  JFROG_REPO: 'devops-project'
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+  AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+  ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
+ 
+## The jobs section defines the individual jobs that will be executed in this workflow. 
+## Each job runs in its own virtual environment and can have dependencies on other jobs.
+## The gitleaks job is responsible for scanning the repository for secrets, while the build job compiles
+## and packages the application. The build job depends on the successful completion of the gitleaks job.
+jobs:
+ gitleaks:
+    name: Gitleaks Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+ 
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+## The build job is responsible for compiling and packaging the application. 
+## It runs on an Ubuntu virtual environment and requires the successful completion 
+## of the gitleaks job. The build job performs the following steps:
+    ## 1. Checkout code: Checks out the code from the repository.
+    ## 2. Set up JDK: Sets up the Java Development Kit (JDK) using the specified version from the environment variable.
+    ## 3. Compile and package: Compiles and packages the application using Maven, skipping tests to speed up the build process.
+    ## 4. Upload build artifact: Uploads the generated JAR file as an artifact for later use
+ build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: gitleaks
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+ 
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: maven
+ 
+      - name: Compile and package (skip tests)
+        run: mvn -B clean package -DskipTests
+ 
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: target/*.jar
+          retention-days: 1
+## The test job is responsible for running unit tests on the application.
+## It runs on an Ubuntu virtual environment and requires the successful completion of the build job.
+ test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+ 
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: maven
+ 
+      - name: Run unit tests
+        run: mvn -B test
+ 
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          if-no-files-found: ignore
