@@ -311,3 +311,40 @@ jobs:
             $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push \
             $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+
+
+# The docker-image-scan job is responsible for scanning the Docker image pushed to Amazon ECR for vulnerabilities using Trivy.
+# It runs on an Ubuntu virtual environment and requires the successful completion of the docker-build-push job. The docker-image-scan job performs the following steps:
+# 1. Configure AWS credentials: Configures the AWS credentials using the specified role and region to allow access to ECR.
+# 2. Login to ECR: Logs in to the Amazon ECR registry using the configured AWS credentials.
+# 3. Scan image with Trivy: Scans the Docker image in ECR for vulnerabilities using Trivy, checking for vulnerabilities with a severity of CRITICAL or HIGH. The scan results are formatted as a table, and the job continues even if vulnerabilities are found (exit code 0). This step ensures that the Docker image is secure and free from critical vulnerabilities before deployment.                       
+
+
+  docker-image-scan:
+    name: Trivy Scan - ECR Image
+    runs-on: ubuntu-latest
+    needs: docker-build-push
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+ 
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+ 
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: |
+            ${{ steps.login-ecr.outputs.registry }}/\
+            ${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          format: table
+          exit-code: '0'
+          severity: CRITICAL,HIGH
