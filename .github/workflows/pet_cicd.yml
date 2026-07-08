@@ -169,6 +169,15 @@ jobs:
     #       fail-on–quality-gate-error: true
 
 
+# The trivy-scan job is responsible for performing a security scan using Trivy.
+# It runs on an Ubuntu virtual environment and requires the successful completion of the sonarQube-scan job. The trivy-scan job performs the following steps:
+# 1. Checkout code: Checks out the code from the repository.
+# 2. Set up JDK: Sets up the Java Development Kit (JDK) using the specified version from the environment variable.
+# 3. Populate Maven cache: Resolves project dependencies and populates the Maven cache to speed up subsequent builds
+# 4. Download build artifact: Downloads the previously uploaded build artifact (JAR file)
+# 5. Run Trivy filesystem scan: Performs a security scan on the filesystem using Trivy, checking for vulnerabilities with a severity of CRITICAL or HIGH. The scan results are formatted as a table, and the job continues even if vulnerabilities are found (exit code 0). Unfixed vulnerabilities are ignored to avoid failing the job.
+# 6. Upload Trivy results: Uploads the Trivy scan results as an artifact for later review. This step runs regardless of the previous steps 
+
   trivy-scan:
     name: Trivy Security Scan
     runs-on: ubuntu-latest
@@ -212,3 +221,46 @@ jobs:
           name: trivy-fs-report
           path: trivy-results.*
           if-no-files-found: ignore
+
+
+# The publish job is responsible for publishing the build artifact (JAR file) to JFrog Artifactory.
+# It runs on an Ubuntu virtual environment and requires the successful completion of both the sonarQube-scan and trivy-scan jobs. The publish job performs the following steps:
+# 1. Download build artifact: Downloads the previously uploaded build artifact (JAR file).
+# 2. Authenticate to Vault and fetch JFrog credentials: Authenticates to HashiCorp Vault using the provided credentials and retrieves the JFrog Artifactory username and password.
+# 3. Setup JFrog CLI: Configures the JFrog CLI with the retrieved credentials and the specified Artifactory URL.
+# 4. Upload JAR to Artifactory: Uploads the JAR file to the specified JFrog Artifactory repository. This step is executed only if the workflow is triggered by a push event to the dev branch.  
+# 5. The publish job is conditional and will only run if the workflow is triggered by a push event to the dev branch. This ensures that the artifact is published only when changes are pushed to the development branch, maintaining a controlled release process.
+  publish:
+    name: Publish to JFrog Artifactory
+    runs-on: ubuntu-latest
+    needs: [ sonarQube-scan, trivy-scan ]
+    if: |
+      github.ref == 'refs/heads/dev' &&
+      github.event_name == 'push'
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+          path: target
+ 
+      - name: Authenticate to Vault and fetch JFrog credentials
+        uses: hashicorp/vault-action@v3
+        with:
+          url: ${{ env.VAULT_ADDR }}
+          method: approle
+          roleId: ${{ env.VAULT_ROLE_ID }}
+          secretId: ${{ env.VAULT_SECRET_ID }}
+          secrets: |
+            ${{ env.VAULT_JFROG_PATH }} username | JF_USER ;
+            ${{ env.VAULT_JFROG_PATH }} password | JF_PASSWORD
+ 
+      - name: Setup JFrog CLI
+        uses: jfrog/setup-jfrog-cli@v4
+        env:
+          JF_URL: ${{ env.JFROG_URL }}
+          JF_USER: ${{ env.JF_USER }}
+          JF_PASSWORD: ${{ env.JF_PASSWORD }}
+ 
+      - name: Upload JAR to Artifactory
+        run: jf rt upload "target/*.jar" ${{ env.JFROG_REPO }}/
