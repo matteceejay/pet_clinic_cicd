@@ -346,3 +346,29 @@ jobs:
           format: table
           exit-code: '0'
           severity: CRITICAL,HIGH
+
+# The deploy-ecs job is responsible for deploying the Docker image to Amazon Elastic Container Service (ECS).
+# It runs on an Ubuntu virtual environment and requires the successful completion of the docker-image-scan job. The deploy-ecs job performs the following steps:
+# 1. Configure AWS credentials: Configures the AWS credentials using the specified role and region to allow access to ECS.
+# 2. Deploy to ECS: Updates the ECS service to force a new deployment, which pulls the latest Docker image from ECR and deploys it to the ECS cluster. This step ensures that the application is
+  
+  deploy-ecs:
+    name: Deploy to ECS
+    runs-on: ubuntu-latest
+    needs: docker-image-scan
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+ 
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --force-new-deployment
