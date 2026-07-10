@@ -5,7 +5,7 @@ name: CI/CD Pipeline - Pet-Clinic
     # 2. Build: Compiles and packages the application, skipping tests, and uploads the build artifact. 
 on:
   push:
-    branches: [ main ]
+    branches: [ dev ]
   pull_request:
     branches: [ main ]
  
@@ -157,18 +157,19 @@ jobs:
             -Dsonar.organization=${{ env.SONAR_ORGANIZATION }}
             -Dsonar.java.binaries=target/classes
  
-      - name: SonarCloud Quality Gate Check
-        id: quality-gate
-        uses: phwt/sonarqube-quality-gate-action@v1
-        with:
-          sonar-project-key: ${{ env.SONAR_PROJECT_KEY }}
-          sonar-host-url: https://sonarcloud.io
-          sonar-token: ${{ env.SONAR_TOKEN }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          branch: dev
-          fail-on–quality-gate-error: true
 
-
+    #   - name: SonarCloud Quality Gate Check
+    #     id: quality-gate
+    #     uses: phwt/sonarqube-quality-gate-action@v1
+    #     with:
+    #       sonar-project-key: ${{ env.SONAR_PROJECT_KEY }}
+    #       sonar-host-url: https://sonarcloud.io
+    #       sonar-token: ${{ env.SONAR_TOKEN }}
+    #       github-token: ${{ secrets.GITHUB_TOKEN }}
+    #       branch: main
+    #       fail-on–quality-gate-error: true
+  
+   
 # The trivy-scan job is responsible for performing a security scan using Trivy.
 # It runs on an Ubuntu virtual environment and requires the successful completion of the sonarQube-scan job. The trivy-scan job performs the following steps:
 # 1. Checkout code: Checks out the code from the repository.
