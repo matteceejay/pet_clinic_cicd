@@ -5,7 +5,7 @@ name: CI/CD Pipeline - Pet-Clinic
     # 2. Build: Compiles and packages the application, skipping tests, and uploads the build artifact. 
 on:
   push:
-    branches: [ dev ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
  
